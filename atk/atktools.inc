@@ -18,6 +18,10 @@
    *
    * @version $Revision: 6776 $
    * $Id: atktools.inc 6776 2010-03-12 14:18:22Z peter $
+   * @GG Implémentation d'un log des erreurs
+   * atk_log_error
+   * atk_log_cut
+   * atk_log_event
    */
 
   /**
@@ -131,7 +135,15 @@
       die;
     }
   }
-
+/**
+ * Impression tableau indenté
+ */
+  function atk_array_print($tableau)
+  {
+  	echo "<pre>";
+  	print_r($tableau);
+  	echo "</pre>";
+  }
   /**
    * Default ATK exception handler, handles uncaught exceptions and calls atkHalt.
    *
@@ -184,15 +196,26 @@
         $res .='<body bgcolor="#ffffff" color="#000000">';
         $res .="<font color=\"$level_color\"><b>".atktext($level,"atk")."</b></font>: $msg.<br />\n";
       }
-      
+      //GG
+		$action='halt('.$level.')';
+		$res=escapeSQL($res);
+		atk_log_error($action, $res,'');
+		// GG Fin
       atkOutput::getInstance()->output($res);
       atkOutput::getInstance()->outputFlush();
       exit("Halted...\n");
     }
     else
     {
-      atkerror("$msg");
-    }
+     
+		// GG
+		$action='halt('.$level.')';
+		$res=escapeSQL($msg);
+		atk_log_error($action, $res,'');
+		// GG Fin
+		atkerror("$msg");
+	}
+    
     return false;
   }
 
@@ -234,8 +257,7 @@
         $txt = atk_htmlentities($txt);
       if (hasFlag($flags, DEBUG_WARNING))
         $txt = "<b>" . $txt . "</b>";
-
-      $line = atkGetTimingInfo().$txt;
+      $line = gmdate("c").' '.atkGetTimingInfo().$txt." ".atkGetTracePremierNiveau("");
       atkWriteLog($line);
 
       if (hasFlag($flags, DEBUG_ERROR))
@@ -256,11 +278,13 @@
         $g_debug_msg[]=$line;
       }
     }
+
     else if ($level>-1) // at 0 we still collect the info so we
                         // have it in error reports. At -1, we don't collect
     {
       $g_debug_msg[]=$txt;
     }
+    
   }
 
   /**
@@ -305,9 +329,18 @@
   function atkerror($txt)
   {
     global $g_error_msg;
+    
     $g_error_msg[]="[".elapsed()."] ".$txt;
 
     atkdebug($txt, DEBUG_ERROR);
+    
+ /*  // DD
+    global $g_debug_msg;
+    while (list($key, $val) = each($g_debug_msg))
+    {
+    	echo "$key => $val<br>";
+    }
+    die ();*/
 
     if (function_exists('debug_backtrace'))
       atkdebug("Trace:".atk_get_trace(), DEBUG_ERROR);
@@ -340,6 +373,7 @@
     $ret = "";
 
     $theSpacer = "";
+
 
     // Loop through all items found in the backtrace
     for($i=0, $_i = count($traceArr); $i < $_i; $i++)
@@ -427,6 +461,111 @@
     // Return the generated trace
     return $ret;
   }
+  
+  function atkGetTracePremierNiveau($format="html")
+  {
+  	// Return if the debug_backtrace function doesn't exist
+  	if(!function_exists("debug_backtrace"))
+  		return "Incorrect php-version for atk_get_trace()";
+  
+  	// Get the debug backtrace
+  	$traceArr = debug_backtrace();
+  
+  	// Remove the call of atk_get_trace
+  	array_shift($traceArr);
+  
+  	// Start with an empty result;
+  	$ret = "";
+  
+  	$theSpacer = "";
+  
+  
+  	// Loop through all items found in the backtrace
+  	$i=0;
+  	//for($i=count($traceArr)-1; $i >= 0; $i--)
+  	{
+  	// Skip this item in the backtrace if empty
+  		if (empty($traceArr[$i]))
+  		continue;
+  
+  		// Don't display an atkerror statement itself.
+  		if ($traceArr[$i]["function"]=="atkerror")
+  		continue;
+  
+  				// Read the source location
+  				if (isset($traceArr[$i]["file"]))
+  				$location = $traceArr[$i]["file"] . (isset($traceArr[$i]["line"]) ? sprintf(", line %d", $traceArr[$i]["line"]) : "[Unknown line]");
+  				else
+  					$location = "[PHP KERNEL]";
+  
+  				// Read the statement
+  				if (isset($traceArr[$i]["class"]))
+  				{
+  				$statement = $traceArr[$i]["class"];
+  				if (isset($traceArr[$i]["type"]))
+  					$statement .= $traceArr[$i]["type"];
+  				}
+  				else
+  				{
+  				$statement = "";
+  				}
+  				$statement .= $traceArr[$i]["function"];
+  
+  					// Initialize the functionParamArr array
+  					$functionParamArr = array();
+  
+  					// Parse any arguments into the array
+  					if(isset($traceArr[$i]["args"]))
+  						{
+  						foreach($traceArr[$i]["args"] as $val)
+  						{
+  						if(is_array($val))
+  						{
+  							$valArr = array();
+  							foreach($val as $name=>$value)
+  								{
+  								if(is_numeric($name))
+  									$valArr[] = $name;
+  									else
+  									{
+  									if (is_object($value))
+  										$valArr[] = sprintf("%s=Object(%s)", $name, get_class($value));
+  										else
+  											$valArr[] = $name."=".$value;
+  											}
+  											}
+  											$stringval = "array(".implode(", ", $valArr).")";
+  											}
+  											else if (is_null($val)) $stringval = 'null';
+  											else if (is_object($val)) $stringval = sprintf("Object(%s)", get_class($val));
+  											else if (is_bool($val)) $stringval = $val ? 'true' : 'false';
+  											else
+  											{
+  											if(strlen($val.$theSpacer) > 103)
+  											$stringval = '"'.substr($val, 0, 100-strlen($theSpacer)).'"...';
+  													else
+  														$stringval = '"'.$val.'"';
+  														}
+  														$functionParamArr[] = $theSpacer."  ".$stringval;
+  														}
+  														}
+  														$functionParams = implode(",\n", $functionParamArr);
+  
+  														$ret .= $theSpacer."  <-----  @".$location." ";
+  														$ret .= $theSpacer.$statement;
+  														//$ret .= (strlen($functionParams)?"\n".$theSpacer."(\n".$functionParams."\n".$theSpacer.")":"()")."\n";
+  
+  														// Add indentation
+  														$theSpacer .= "  ";
+  	}
+  
+  	// If html format should be used, replace the html special chars with html entities and put the backtrace within preformat tags.
+  	if ($format=="html")
+  		$ret = "<pre>" . htmlspecialchars($ret) . "</pre>";
+  
+  		// Return the generated trace
+  		return $ret;
+  }
 
   /**
    * @deprecated Use atkGetTrace instead
@@ -461,7 +600,7 @@
    */
   function atkWriteLog($text)
   {
-    if (atkconfig("debug") > 0 && atkconfig("debuglog"))
+  	if (atkconfig("debug") >= 0 && atkconfig("debuglog"))
     {
       atkWriteToFile($text, atkconfig("debuglog"));
     }
@@ -989,7 +1128,249 @@
     $errorHandlerObject = atkErrorHandlerBase::get('mail', array('mailto'=>atkconfig('mailreport')));
     $errorHandlerObject->handle($g_error_msg, $g_debug_msg);
   }
-
+  // GG
+  function getContexte()
+  {
+  	global $g_error_msg, $g_debug_msg, $g_sessionManager, $g_sessionData, $g_user, $g_modules;
+  
+  
+  	$body.= "\nPHP Version: ".phpversion()."\n\n";
+  
+  
+  	$body.= "\nDEBUGMESSAGES\n".str_repeat("-",70)."\n";
+  
+  	$lines = array();
+  	for($i=0, $_=count($g_debug_msg);$i<$_;$i++)
+  	{
+  		$lines[] = _wordwrap(html_entity_decode(preg_replace('(\[<a.*</a>\])','',$g_debug_msg[$i])));
+  	}
+  	$body.= implode("\n",$lines);
+  
+  	if (is_array($_GET))
+  	{
+  		$body.= "\n\n_GET\n".str_repeat("-",70)."\n";
+  		foreach ($_GET as $key=>$value)
+  		{
+  			$body.=_wordwrap($key.str_repeat(" ",max(1,20-strlen($key)))." = ".var_export($value,1))."\n";
+  		}
+  	}
+  
+  	if (function_exists("getallheaders"))
+  	{
+  		$request = getallheaders();
+  		if (count($request)>0)
+  		{
+  			$body.= "\n\nREQUEST INFORMATION\n".str_repeat("-",70)."\n";
+  			foreach($request as $key=>$value)
+  			{
+  				$body.=_wordwrap($key.str_repeat(" ",max(1,30-strlen($key)))." = ".var_export($value,1))."\n";
+  			}
+  		}
+  	}
+  
+  	if (is_array($_POST))
+  	{
+  		$body.= "\n\n_POST\n".str_repeat("-",70)."\n";
+  		foreach ($_POST as $key=>$value)
+  		{
+  			$body.=_wordwrap($key.str_repeat(" ",max(1,20-strlen($key)))." = ".var_export($value,1))."\n";
+  		}
+  	}
+  
+  	if (is_array($_COOKIE))
+  	{
+  		$body.= "\n\n_COOKIE\n".str_repeat("-",70)."\n";
+  		foreach ($_COOKIE as $key=>$value)
+  		{
+  			$body.=_wordwrap($key.str_repeat(" ",max(1,20-strlen($key)))." = ".var_export($value,1))."\n";
+  		}
+  	}
+  
+  	$body.= "\n\nATK CONFIGURATION\n".str_repeat("-",70)."\n";
+  	foreach ($GLOBALS as $key=>$value)
+  	{
+  		if (substr($key,0,7)=="config_")
+  		{
+  			$body.=_wordwrap($key.str_repeat(" ",max(1,30-strlen($key)))." = ".var_export($value,1))."\n";
+  		}
+  	}
+  
+  	$body.= "\n\nMODULE CONFIGURATION\n".str_repeat("-",70)."\n";
+  	foreach ($g_modules as $modname => $modpath)
+  	{
+  		$modexists = file_exists($modpath) ? " (path exists)" : " (PATH DOES NOT EXIST!)";
+  		$body.=_wordwrap($modname.":".str_repeat(" ",max(1,20-strlen($modname))).var_export($modpath,1).$modexists)."\n";
+  	}
+  
+  	$body.= "\n\nCurrent User:\n".str_repeat("-",70)."\n";
+  	if (is_array($g_user) && count($g_user))
+  	{
+  		foreach($g_user as $key => $value)
+  		{
+  			$body.=_wordwrap($key.str_repeat(" ",max(1,30-strlen($key)))." = ".var_export($value,1))."\n";
+  		}
+  	}
+  	else $body.= "Not known\n";
+  
+  	if (is_object($g_sessionManager))
+  	{
+  		$body.= "\n\nATK SESSION\n".str_repeat("-",70);
+  		$body.= "\nNamespace: ".$g_sessionManager->m_namespace."\n";
+  		if (isset($g_sessionData[$g_sessionManager->m_namespace]["stack"]))
+  		{
+  			$stack = $g_sessionData[$g_sessionManager->m_namespace]["stack"];
+  			for($i=0;$i<count($stack);$i++)
+  			{
+  				$body.="\nStack level $i:\n";
+  				$item = isset($stack[$i]) ? $stack[$i] : null;
+  				if (is_array($item))
+  				{
+  					foreach ($item as $key=>$value)
+  					{
+  						$body.=_wordwrap($key.str_repeat(" ",max(1,30-strlen($key)))." = ".var_export($value,1))."\n";
+  					}
+  				}
+  			}
+  		}
+  		if (isset($g_sessionData[$g_sessionManager->m_namespace]["globals"]))
+  		{
+  			$ns_globals = $g_sessionData[$g_sessionManager->m_namespace]["globals"];
+  			if(count($ns_globals)>0)
+  			{
+  				$body.="\nNamespace globals:\n";
+  				foreach ($ns_globals as $key=>$value)
+  				{
+  					$body.=_wordwrap($key.str_repeat(" ",max(1,30-strlen($key)))." = ".var_export($value,1))."\n";
+  				}
+  			}
+  		}
+  		if (isset($g_sessionData["globals"]))
+  		{
+  			$globals = $g_sessionData["globals"];
+  			if (count($globals)>0)
+  			{
+  				$body.="\nGlobals:\n";
+  				foreach ($globals as $key=>$value)
+  				{
+  					$body.=_wordwrap($key.str_repeat(" ",max(1,30-strlen($key)))." = ".var_export($value,1))."\n";
+  				}
+  			}
+  		}
+  	}
+  
+  	$body.= "\n\nSERVER INFORMATION\n".str_repeat("-",70)."\n";
+  
+  	foreach ($_SERVER as $key=>$value)
+  	{
+  		$body.=_wordwrap($key.str_repeat(" ",max(1,20-strlen($key)))." = ".var_export($value,1))."\n";
+  	}
+  	return $body;
+  }
+  
+  function atk_log_error($action, $parametres,$error_message)
+  {
+  	/*
+  	 * Appelé de :
+  	* atkdb (db) 545
+  	* atktools 159, 171, 1003
+  	*/
+  	$error_message =escapeSQL($error_message);
+  	$origine='atk_log_error';
+  	atk_log_event($origine, $node, $action, $parametres, $selector, $error_message, null);
+  	// GG FIN
+  }
+  // GG
+  function atk_log_cut($nombre,$id)
+  {
+  	$db = &atkGetDb(atkconfig("auth_database"));
+  
+  	$data=$db->getrows("SELECT id  from atkeventlog where userid=$id and action != 'login' ORDER BY id  LIMIT 1,$nombre");
+  	if (!empty($data[0]["id"]) )
+  	{ $id_limite=$data[0]["id"];
+  
+  	$db->query("DELETE from atkeventlog where userid=$id and action != 'login' and id <$id_limite ");
+  	}
+  	$db->commit();
+  
+  }
+  function atk_log_event($origine, $node, $action, $parametres, $selector, $error_message, $userid, $dispatch_ms_time=null, $dispatch_ms_elapsed_time=null,$query_count=null, $html_page_output_ms_time=null,$html_page_output_size=null)
+  {
+  	/*
+  	 * Appelé de :
+  	* atkactionhandler (handlers) 312
+  	* atkdeletehandler (handlers) 97
+  	* auth_db (security) 89
+  	* atkeventlog (utils) 67
+  	* atkcontroller 252
+  	* atktools 1149
+  	* dispatch.php 117 (avec calcul temps)
+  	* menu.php 145 (avec calcul temps)
+  	*/
+  	global $g_sessionManager;
+  	if (!isset($g_sessionManager))
+  	{return true;}
+  	$log_o_n = $g_sessionManager->getValue("log_o_n", "globals");
+  	$admin_o_n =$g_sessionManager->getValue("atgAdministrateur_o_n", "globals");
+  
+  
+  	if ($log_o_n==0 )
+  	{ return true;}
+  	if ($id>0)
+  	{	 	$userid=$id;	 }
+  	else
+  	{$user = getUser();
+  	$userid=$user["id"];}
+  
+  	$db = &atkGetDb(atkconfig("auth_database"));
+  	$parametres=escapeSQL($parametres);
+  	($action=="wiki")? $selector=escapeSQL($parametres) : $selector=escapeSQL($selector);
+  	$host=escapeSQL($_SERVER['HTTP_HOST']);
+  	$remote_address=escapeSQL($_SERVER['REMOTE_ADDR']);
+  	$user_agent=escapeSQL($_SERVER['HTTP_USER_AGENT']);
+  	$accept_language=escapeSQL($_SERVER['HTTP_ACCEPT_LANGUAGE']);
+  	$referer=escapeSQL($_SERVER['HTTP_REFERER']);
+  	$query_string=escapeSQL($_SERVER['QUERY_STRING']);
+  	$nextid=$db->nextid("atkeventlog");
+  	$sql="INSERT INTO atkeventlog (id, userid, stamp,origine, node, action, parametres,
+  	selector,
+  	host,
+  	remote_address,
+  	user_agent,
+  	accept_language,
+  	referer,
+  	query_string,
+  	error_message,
+  	dispatch_ms_time,
+  	dispatch_ms_elapsed_time,
+  	query_count,
+  	html_page_output_ms_time,
+  	html_page_output_size
+  	)
+  	VALUES('$nextid', '$userid', UTC_TIMESTAMP, '$origine', '$node', '$action', '$parametres','$selector' ,'$host',
+  	'$remote_address',
+  	'$user_agent',
+  	'$accept_language',
+  	'$referer',
+  	'$query_string',
+  	'$error_message',";
+  	($dispatch_ms_time==0 || $dispatch_ms_time=="") ? $sql.="NULL, " : $sql.="'$dispatch_ms_time',";
+  	($dispatch_ms_elapsed_time==0 || $dispatch_ms_elapsed_time=="") ? $sql.="NULL , " : $sql.="'$dispatch_ms_elapsed_time',";
+  	($query_count==0 || $query_count=="") ? $sql.="NULL , " : $sql.="'$query_count', ";
+  	($html_page_output_ms_time==0 || $html_page_output_ms_time=="") ? $sql.="NULL  ," : $sql.="'$html_page_output_ms_time', ";
+  	($html_page_output_ms_time==0 || $html_page_output_size=="") ? $sql.="NULL  " : $sql.="'$html_page_output_size' ";
+  	$sql.=")";
+  
+  	$db->query($sql);
+  	/*	if ($admin_o_n=="1")
+  	 {echo "Atklogevent";
+  	echo "   Log : ".$log_o_n;
+  	echo " <br/>  sql : ".$sql;
+  	die();}
+  	*/
+  	$db->commit();
+  }
+  
+  // GG
   /**
    * Handle errors that occurred in ATK, available handlers from /atk/errors/ can be added to
    * the error_handlers config.
