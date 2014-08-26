@@ -9,26 +9,26 @@ $config_db["default"]["driver"] = "mysql";
 $config_db["default"]["host"]     = "mysql.wikiservas.net";
 $config_db["default"]["db"]       = "association";
 $config_db["default"]["user"]     = "webmaster";
-$config_db["default"]["password"] = "rx9999";
+$config_db["default"]["password"] = "rf1930";
 //$config_db["default"]["charset"]  = "utf8";
 //$config_default_charset = "utf-8";
 $config_db["schema"]["driver"] = "mysql";
 $config_db["schema"]["host"]     = "mysql.wikiservas.net";
 $config_db["schema"]["db"]       = "information_schema";
 $config_db["schema"]["user"]     = "webmaster";
-$config_db["schema"]["password"] = "rx9999";
+$config_db["schema"]["password"] = "rf1930";
 
 $config_db["association"]["driver"] = "mysql";
 $config_db["association"]["host"]     = "mysql.wikiservas.net";
 $config_db["association"]["db"]       = "association";
 $config_db["association"]["user"]     = "webmaster";
-$config_db["association"]["password"] = "rx9999";
+$config_db["association"]["password"] = "rf1930";
 
 $config_db["assocopewiki"]["driver"] = "mysql";
 $config_db["assocopewiki"]["host"]     = "mysql.wikiservas.net";
 $config_db["assocopewiki"]["db"]       = "assocopewiki";
 $config_db["assocopewiki"]["user"]     = "webmaster";
-$config_db["assocopewiki"]["password"] = "rx9999";
+$config_db["assocopewiki"]["password"] = "rf1930";
 
 $config_allowed_includes[]="./atk/popups/htmlpopup.inc";
 $config_allowed_includes[]="./atk/popups/qrpopup.inc";
@@ -180,7 +180,7 @@ $config_mailreport = "guy.gourmellet@gmail.com";
 //  1 - Print some debug information at the bottom of each screen
 //  2 - Print debug information, and pause before redirects
 //  3 - Like 2, but also adds trace information to each statement
-$config_debug =-1;
+$config_debug =0;
 $config_debuglog=$config_atktempdir."debug.log";
 
 // Smart debug parameters. Is used to dynamically enable debugging for
