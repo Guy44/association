@@ -32,16 +32,18 @@ include_once("atk.inc");
 atksession();
 
 atksecure();
+
+/*/ DD
+ echo " $GLOBALS : <br>";
+echo "<pre>";
+print_r ($GLOBALS);
+echo "</pre>";
+die();
+*/
 //echo "Finidebutapres secure";die();
 include "theme.inc";
 global $g_sessionManager ;
-
-
-
 global $g_user;
-
-
-
 if ($g_user["name"] != "administrator") {
 	$db = & atkGetDb();
 	$user = getUser();

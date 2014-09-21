@@ -7,7 +7,7 @@ class rencontre_fournisseur extends assMetaNode {
 		$policy->addFlags("commentaire", "description", AF_HIDE_LIST);
 		$policy->addFlags("id_creation", "date_creation", "id_modification", "date_modification", AF_READONLY);
 		//				$policy->addFlags("id_ecriture_depense", "id_ecriture_reglement", AF_READONLY|AF_FORCE_LOAD);
-		$policy->setOrder("id_rencontre");
+		$policy->setOrder("libelle");
 	}
 	function rencontre_fournisseur() {
 		$this->atkMetaNode();

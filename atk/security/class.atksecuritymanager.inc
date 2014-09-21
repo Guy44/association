@@ -13,8 +13,8 @@
    * @copyright (c)2000-2004 Ibuildings.nl BV
    * @license http://www.achievo.org/atk/licensing ATK Open Source License
    *
-   * @version $Revision: 5963 $
-   * $Id: class.atksecuritymanager.inc 5963 2008-06-12 08:39:36Z boy $
+   * @version $Revision: 6301 $
+   * $Id: class.atksecuritymanager.inc 6657 2010-01-15 15:21:57Z mvdvelden $
    */
 
   /**
@@ -58,7 +58,7 @@
     /**
      * Register a new listener.
      *
-     * @param atkSecurityListener listener
+     * @param atkSecurityListener $listener
      */
     function addListener(&$listener)
     {
@@ -68,8 +68,8 @@
     /**
      * Notify listeners of a certain event.
      *
-     * @param string event name
-     * @param string username (might be null)
+     * @param string $event name
+     * @param string $username (might be null)
      */
     function notifyListeners($event, $username)
     {
@@ -101,7 +101,7 @@
      * full classname like module.mymodule.myauthtype
      *
      * @param string $authentication_type
-     * @return array authetication types
+     * @return array authentication types
      */
     function _getAuthTypes($authentication_type)
     {
@@ -124,6 +124,10 @@
     /**
      * Constructor
      * @access private
+     * 
+     * @param string $authentication_type The type of authentication (user/password verification) to use
+     * @param string $authorization_type The type of authorization (mostly the same as the authentication_type)
+     * @param string $securityscheme The security scheme that will be used to determine who is allowed to do what
      */
     function atkSecurityManager($authentication_type="none", $authorization_type="none", $securityscheme="none")
     {
@@ -207,7 +211,6 @@
     {
       global $g_sessionManager, $ATK_VARS;
       $session = &atkSessionManager::getSession();
-
       $response=AUTH_UNVERIFIED;
 
       if (atkconfig("auth_loginform")==true) // form login
@@ -217,10 +220,10 @@
       }
       else // HTTP login
       {
-        $auth_user = $_SERVER["PHP_AUTH_USER"];
-        $auth_pw = $_SERVER["PHP_AUTH_PW"];
+        $auth_user = isset($_SERVER["PHP_AUTH_USER"]) ? $_SERVER["PHP_AUTH_USER"] : null;
+        $auth_pw = isset($_SERVER["PHP_AUTH_PW"]) ? $_SERVER["PHP_AUTH_PW"] : null;
       }
-
+      atkdebug (" User authenticated ".$auth_user);
       // throw post login event?
       $throwPostLoginEvent = false;
 
@@ -231,9 +234,14 @@
         $this->notifyListeners("preLogout", $auth_user);
 
         session_destroy();
+
         $cookie_params = session_get_cookie_params();
-        session_set_cookie_params($cookie_params["lifetime"], dirname($_SERVER["SCRIPT_NAME"]));
+        $cookiepath   = atkconfig("application_root");
+        $cookiedomain = (atkconfig("cookiedomain") != "") ? atkconfig("cookiedomain") : NULL;
+        session_set_cookie_params($cookie_params["lifetime"], $cookiepath, $cookiedomain);
+       atkdebug("avant @session_start  (atksecuritymanager.authenticate)",DEBUG_HTML);
         @session_start();
+        atkdebug("après @session_start  (atksecuritymanager.authenticate) ",DEBUG_HTML);
         $session = array();
         $session["relogin"]=1;
 
@@ -470,7 +478,7 @@
         }
         else
         {
-          header('WWW-Authenticate: Basic realm="'.atktext("AssoCope").(atkconfig("auth_changerealm", true)?' - '.strftime("%c",time()):"").'"');
+          header('WWW-Authenticate: Basic realm="'.atktext("app_title").(atkconfig("auth_changerealm", true)?' - '.strftime("%c",time()):"").'"');
           if (ereg("Microsoft", $_SERVER['SERVER_SOFTWARE'])) header("Status: 401 Unauthorized");
           else header("HTTP/1.0 401 Unauthorized");
           return false;
@@ -485,14 +493,16 @@
 
       // return
       // g_user always lowercase
-      $this->m_user["name"] =  $this->m_user["name"];
+      
+      $this->m_user["name"] =  strtolower($this->m_user["name"]);
+      
       //Send the username with the header
       //This way we can always retrieve the user from apache logs
       header('user: '.$this->m_user["name"]);
       $GLOBALS["g_user"] = $this->m_user;
       $g_sessionManager->globalVar("authentication",array("authenticated"=>1, "user"=>$this->m_user), true);
       sessionStore('loginattempts',''); //reset maxloginattempts
-
+      atkdebug($this->m_user["name"].' a été stocké dans $g_user["name"] et $g_sessionManager ["user"]["name"]' );
       if ($throwPostLoginEvent)
         $this->notifyListeners("postLogin", $auth_user);
 
@@ -521,10 +531,14 @@
     /**
      * Display a login form.
      * @access private
+     *
+     * @param string $defaultname The username that might already be known
+     * @param int    $lastresponse The lastresponse when trying to login 
+     *                              possible values: AUTH_MISMATCH, AUTH_LOCKED, AUTH_MISSINGUSERNAME, AUTH_PASSWORDSENT
      */
     function loginForm($defaultname, $lastresponse)
     {
-      $loginattempts = sessionLoad('loginattempts');
+      $loginattempts = sessionLoad('loginattempts'); // Note: not actually how many authentication attempts, but how many times the login form has been displayed.
       if($loginattempts=="") $loginattempts = 0;
 
       if($loginattempts=="")
@@ -575,8 +589,7 @@
         $tplvars["userfield"] = $userField;
         $tplvars["passwordfield"] = '<input class="loginform" type="password" size="15" name="auth_pw" value="" />';
         $tplvars["submitbutton"] = '<input name="login" class="button" type="submit" value="'.atktext('login').'" />';
- //       $tplvars["title"] = atktext('login_form');
-             $tplvars["title"] = "AssoCope";
+        $tplvars["title"] = atktext("AssoCope");
 
         if ($lastresponse == AUTH_LOCKED)
         {
@@ -603,28 +616,18 @@
         }
 
         // generate the form
- //       $output.="<tr><td valign=top>".'<img src="./atk/themes/t3skin/images/logo.gif" alt="" align="center" border="0" ></img>'."</td></tr>";
-        
-        $output.="<tr><td valign=top>&nbsp;&nbsp;&nbsp;".atktext('username')."</td><td>".$userField."</td></tr>";
+        $output.="<tr><td valign=top>".atktext('username')."</td><td>:</td><td>".$userField."</td></tr>";
         $output.="<tr><td colspan=3 height=6></td></tr>";
-        $output.="<tr><td valign=top>&nbsp;&nbsp;&nbsp;".atktext('password')."</td><td><input type=password size=15 name=auth_pw value='' /></td></tr>";
-        
+        $output.="<tr><td valign=top>".atktext('password')."</td><td>:</td><td><input type=password size=15 name=auth_pw value='' /></td></tr>";
         $output.='<tr><td colspan="3" align="center" height="50" valign="middle">';
-        $output.='&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<input name="login" class="button" type="submit" value="'.atktext('login').'">';
- 
+        $output.='<input name="login" class="button" type="submit" value="'.atktext('login').'">';
         $tplvars["auth_enablepasswordmailer"] = atkconfig("auth_enablepasswordmailer", false);
         if (atkconfig("auth_enablepasswordmailer", false))
         {
           $output.='&nbsp;&nbsp;<input name="login" class="button" type="submit" value="'.atktext('password_forgotten').'">';
           $tplvars["forgotpasswordbutton"] = '<input name="login" class="button" type="submit" value="'.atktext('password_forgotten').'">';
         }
-      
         $output.='</td></tr>';
-        $output.='<tr><td colspan="3" align="center" height="6" valign="middle">';
-                 $output.='<center><b><a href="http://www.google.fr/chrome/intl/fr/more/" target="_blank"> Utiliser de préférence le navigateur Chrome</a>'.
-                 '<br/></b>'.'<b><a href="http://aide.quomodo.com/depannage/vider_le_cache_de_mon_navigateur.html" target="_blank" >Pensez à vider régulièrement le cache de votre navigateur internet pour mettre à jour les icônes et les mises en page</a></b>
-                 			'.' </b></td></tr></center>'
-                 		;
 
       }
 
@@ -640,6 +643,8 @@
      * Generate field for entering the username (dropdown or input box,
      * depending on settings.
      * @access private
+     * 
+     * @param string $defaultname The username that might already be known
      */
     function auth_userField($defaultname)
     {
@@ -680,7 +685,7 @@
       }
       else
       {
-        return '<input class="loginform" type="text" size="15" name="auth_user" value="'.htmlentities($defaultname).'" />';
+        return '<input class="loginform" type="text" size="15" name="auth_user" value="'.atk_htmlentities($defaultname).'" />';
       }
     }
 
@@ -789,9 +794,16 @@
       }
     }
 
+    /**
+     * If we are using cookies to store the login information this function will generate 
+     * the cookiename 
+     *
+     * @return cookiename based on the application title
+     */
     function _getAuthCookieName()
     {
-      return "atkauth_3".str_replace(" ","_",atktext("app_title"));
+    	// GG ajout de ."loc" pour test en local
+      return "atkauth_3".str_replace(" ","_",atktext("app_title")."loc");
     }
   }
 
